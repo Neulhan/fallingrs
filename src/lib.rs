@@ -6,11 +6,11 @@ use rand::Rng;
 extern crate web_sys;
 
 
-// #[wasm_bindgen]
-// extern "C" {
-//     #[wasm_bindgen(js_namespace = console)]
-//     fn log(s: &str);
-// }
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
 
 
 fn window() -> web_sys::Window {
@@ -30,17 +30,16 @@ fn canvas() -> web_sys::HtmlCanvasElement {
 }
 
 #[wasm_bindgen]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum FlakeType {
     Square,
     Text,
     Circle,
 }
-
 #[wasm_bindgen]
 
 pub struct FallingConfig {
-    frequency: u8,
+    frequency: f64,
     min_radius: f64,
     max_radius: f64,
     min_speed: f64,
@@ -56,7 +55,7 @@ pub struct FallingConfig {
 #[wasm_bindgen]
 impl FallingConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(frequency: u8, min_radius: f64, max_radius: f64, min_speed: f64, max_speed: f64, min_angle:f64, max_angle: f64, colors: Vec::<String>, type_: FlakeType, text: String, el: String) -> FallingConfig {
+    pub fn new(frequency: f64, min_radius: f64, max_radius: f64, min_speed: f64, max_speed: f64, min_angle:f64, max_angle: f64, colors: Vec::<String>, type_: FlakeType, text: String, el: String) -> FallingConfig {
         Self {
             frequency,
             min_radius,
@@ -95,6 +94,7 @@ struct Scene {
     el: web_sys::Element,
     stage_width: f64,
     stage_height: f64,
+    time: f64,
 }
 
 #[wasm_bindgen]
@@ -171,25 +171,40 @@ impl Scene {
             el,
             stage_height: 0f64,
             stage_width: 0f64,
+            time: 0f64,
         }
     }
 
     pub fn resize(&mut self) {
         self.stage_width = self.el.client_width() as f64;
         self.stage_height = self.el.client_height() as f64;
-        self.canv.set_width(self.stage_width as u32);
-        self.canv.set_height(self.stage_height as u32);
-        // self.canv.set_width((self.stage_width * 2f64) as u32);
-        // self.canv.set_height((self.stage_height * 2f64) as u32);
-        // self.ctx.scale(2.0, 2.0).unwrap();
+        self.canv.set_width(self.stage_width as u32 * 2);
+        self.canv.set_height(self.stage_height as u32 * 2);
+        self.ctx.scale(2.0, 2.0).unwrap();
+    }
+    
+
+    pub fn add_objects(&mut self, t: f64) {
+        if self.config.frequency >= 1f64 {
+            for _ in 0..self.config.frequency as u32 {
+                self.objects.push(FallingObject::new(self));
+            }
+        } else {
+            if self.time == 0f64 {self.time = t}
+            let now = t - self.time;
+            if now > (10f64 / self.config.frequency) {
+                self.time = t;
+                self.objects.push(FallingObject::new(self));
+            }
+        }
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, t: f64) {
         self.ctx.clear_rect(0.0, 0.0, self.stage_width as f64, self.stage_height as f64);
-        for _ in 0..self.config.frequency {
-            self.objects.push(FallingObject::new(self));
-        }
         self.objects.retain(|sf| !sf.deleted);
+
+        self.add_objects(t);
+
         for i in 0..self.objects.len() {
             if self.objects[i].update() > self.stage_height {
                 self.objects[i].deleted = true;
